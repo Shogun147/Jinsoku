@@ -1,0 +1,31 @@
+{
+  "name": "jinsoku",
+  "description": "High performance Javascript template engine inspired by Jade's power and doT's speed.",
+  "version": "0.1.0",
+  
+  "author": "Shogun <Shogun147@gmail.com> (http://github.com/Shogun147)",
+  "contributors": [ 
+    { "name": "Shogun", "email": "Shogun147@gmail.com" }
+  ],
+
+  "keywords": ["jinsoku", "template", "speed", "jade", "doT"],
+
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/Shogun147/Jinsoku.git",
+    "web": "http://github.com/Shogun147/Jinsoku"
+  },
+
+  "bugs": {
+    "url": "https://github.com/Shogun147/Jinsoku/issues"
+  },
+
+  "dependencies": {
+  },
+  "devDependencies": {
+  },
+
+  "main": "./jinsoku",
+
+  "engines": { "node": "> 0.4" }
+}
