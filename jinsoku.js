@@ -60,13 +60,13 @@
 			
 			      b.content = b.prepend.join('') + b.content + b.append.join('');
 			
-			      view.templates[tpl].content = view.templates[tpl].content.replace('[#block:'+ block +'#]', b.content);
+			      view.templates[tpl].content = view.templates[tpl].content.replace('{#block:'+ block +'#}', b.content);
 		      }
 	      }
 	
 	      for (var tpl in view.templates) {
 		      for (var partial in view.templates[tpl].partials) {
-			      view.templates[template].content = view.templates[template].content.replace('[#template:'+ partial +'#]', view.templates[partial].content);
+			      view.templates[template].content = view.templates[template].content.replace('{#template:'+ partial +'#}', view.templates[partial].content);
 		      }
 	      }
 	
@@ -103,7 +103,7 @@
 		  var self = this;
 		  var tpl = view.templates[template];
 		
-      tpl.content = tpl.content.replace(/\{(block|prepend|append):\s*([^\}]+)([!]?)\}([\s\S]*?)\{\/\1\}/g, function(m, action, name, clone, content) {
+      tpl.content = tpl.content.replace(/\[(block|prepend|append):\s*([^\]]+)([!]?)\]([\s\S]*?)\[\/\1\]/g, function(m, action, name, clone, content) {
 			  var isnew = false;
 			
 				if (!tpl.blocks[name]) {
@@ -115,11 +115,11 @@
 
 					isnew = true;
 				}
-
+				
 				if (action == 'block') {
 					tpl.blocks[name].content = content;
-
-					return isnew || clone ? '[#block:'+ name +'#]' : '';
+					
+					return isnew || clone ? '{#block:'+ name +'#}' : '';
 				} else {
 					tpl.blocks[name][action].push(content);
 
@@ -147,7 +147,7 @@
 			  });
 		  }
 
-		  template.content = template.content.replace(new RegExp('\{\\/('+ Object.keys(self.parsers).join('|') +'|\/)\}', 'g'), "'; } body += '");
+		  template.content = template.content.replace(new RegExp('\\[\\/('+ Object.keys(self.parsers).join('|') +'|\/)\\]', 'g'), "'; } body += '");
 		},
 	
 	  extend: function(template, view, callback) {
@@ -162,14 +162,14 @@
 				};
 
         self.include(template, view, function() {
-	        view.templates[template].content = view.templates[template].content.replace(/\{extend:\s*([^\}]+)\}([\s\S]*?)\{\/extend\}/g, function(m, tmpl, code) {
+	        view.templates[template].content = view.templates[template].content.replace(/\[extend:\s*([^\]]+)\]([\s\S]*?)\[\/extend\]/g, function(m, tmpl, code) {
 						view.pending++;
 
 						view.templates[template].partials[tmpl] = code;
 
 						self.extend(tmpl, view, callback);
 
-						return '[#template:'+ tmpl +'#]';
+						return '{#template:'+ tmpl +'#}';
 					});
 					
 					if (!--view.pending) {
@@ -182,7 +182,7 @@
 	  include: function(template, view, callback) {
 		  var self = this;
 		
-		  var regexp = /\{include:\s*([^\}]+)\s*\}/g;
+		  var regexp = /\[include:\s*([^\]]+)\s*\]/g;
 		  var str = view.templates[template].content;
 		  var includes = [];
 		  var m;
@@ -199,7 +199,7 @@
 		
 		  includes.forEach(function(tmpl) {
 			  self.template(tmpl, function(content) {
-				  view.templates[template].content = view.templates[template].content.replace(new RegExp('\\{include:\\s*'+ tmpl +'\\s*\\}'), content);
+				  view.templates[template].content = view.templates[template].content.replace(new RegExp('\\[include:\\s*'+ tmpl +'\\s*\\]'), content);
 				  
 				  self.include(template, view, callback);
 				
@@ -219,25 +219,25 @@
 		}
 	};
 
-	Jinsoku.parser('if', /\{if:([^\}]+)\}([\s\S]*?)\{\/if\}/g, function(template, view, condition, content) {
+	Jinsoku.parser('if', /\[if:([^\]]+)\]([\s\S]*?)\[\/if\]/g, function(template, view, condition, content) {
 		var str = "'; if ("+ condition +") { body +='"+ content +"'; } body +='";
 
-		str = str.replace(/\{(?::([^\}]+)?)\}/g, function(m, condition) {
+		str = str.replace(/\[(?::([^\]]+)?)\]/g, function(m, condition) {
 			return "'; } else "+ (condition ? "if ("+ condition +")" : "") +"{ body +='";
 		});
 
 		return str;
 	});
 
-	Jinsoku.parser('each', /\{each:([^:\}\s]+)\s*(?::([^:\}]+))?\s*(?::([^:\}]+))?\}/g, function(template, view, items, key, iname) {
+	Jinsoku.parser('each', /\[each:([^:\]\s]+)\s*(?::([^:\]]+))?\s*(?::([^:\]]+))?\]/g, function(template, view, items, key, iname) {
 		iname = iname || 'i';
 
-		var str = "'; for (var "+ iname +"=0; "+ iname +"<"+ items +".length; "+ iname +"++) { var "+ key +" = "+ items +"["+ iname +"]; body += '";
+		var str = "'; for (var "+ iname +"=0, _len="+items+".length; "+ iname +"<_len; "+ iname +"++) { var "+ key +" = "+ items +"["+ iname +"]; body += '";
 
 		return str;
 	});
 
-	Jinsoku.parser('for', /\{for:([^:\}\s]+)\s*(?::([^:\}]+))?\s*(?::([^:\}]+))?\}/g, function(template, view, items, key, iname) {
+	Jinsoku.parser('for', /\[for:([^:\]\s]+)\s*(?::([^:\]]+))?\s*(?::([^:\]]+))?\]/g, function(template, view, items, key, iname) {
 		iname = iname || 'i';
 
 		var str = "'; for (var "+ iname +" in "+ items +") { var "+ key +" = "+ items +"["+ iname +"]; body += '";
@@ -245,10 +245,10 @@
 		return str;
 	});
 
-	Jinsoku.parser('case', /\{case:\s*([^\}]+)\}([\s\S]*?)\{\/case\}/g, function(template, view, condition, content) {
+	Jinsoku.parser('case', /\[case:\s*([^\]]+)\]([\s\S]*?)\[\/case\]/g, function(template, view, condition, content) {
 		var str = "'; switch("+ condition +") {"+ content.replace(/^\n*/, ' ').replace(/\n*$/, ' ') +" ";
 
-		str = str.replace(/\{:(?:([^\}]+))?\}(?:([^:\{]+))/g, function(m, condition, content) {
+		str = str.replace(/\[:(?:([^\]]+))?\](?:([^:\[]+))/g, function(m, condition, content) {
 			return (condition ? " case "+condition : " default") +": body += '" + content + "'; break;";
 		});
 
@@ -257,7 +257,7 @@
 		return str;
 	});
 
-	Jinsoku.parser('var', /(#|!)\{([\s\S]+?)\s*(?::([^\}]+))?\}/g, function(template, view, type, key, value) {
+	Jinsoku.parser('var', /(#|!)\[([\s\S]+?)\s*(?::([^\]]+))?\]/g, function(template, view, type, key, value) {
 		var code;
 		
 		var encode = type === '!';
@@ -273,7 +273,7 @@
 		return value !== undefined ? "'; var "+ key +" = "+ value + code +"; body += '" : "'+ "+ (encode ? "encodeHtml" : "") +"("+ (code ? key+code : key) +") +'";
 	});
 	
-	Jinsoku.parser('evaluate', /\{#([\s\S]+?)#\}/g, function(template, view, code) {
+	Jinsoku.parser('evaluate', /\[#([\s\S]+?)#\]/g, function(template, view, code) {
 		return "'; "+ this.unescape(code) +" body += '";
 	});
 	
@@ -302,7 +302,3 @@
 		global.Jinsoku = Jinsoku
 	}
 }());
-
-
-
-
