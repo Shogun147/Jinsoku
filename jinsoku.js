@@ -220,7 +220,7 @@
 	};
 
   Jinsoku.parser('clone', /\[clone:\s*([^\]]+)\s*\]/g, function(template, view, block) {
-		return '{#block:'+ block +'#}';
+	  return (template.blocks[block] && template.blocks[block].content || '#block: '+block+'#');
 	});
 
 	Jinsoku.parser('if', /\[if:([^\]]+)\]([\s\S]*?)\[\/if\]/g, function(template, view, condition, content) {
