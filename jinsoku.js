@@ -154,6 +154,8 @@
 		  var self = this;
 		
 		  self.template(template, function(content) {
+			  content = content.replace(/`|'|\\/g, '\\$&');
+			
 				view.templates[template] = {
 					content: content,
 					partials: {},
@@ -199,6 +201,8 @@
 		
 		  includes.forEach(function(tmpl) {
 			  self.template(tmpl, function(content) {
+				  content = content.replace(/`|'|\\/g, '\\$&');
+				
 				  view.templates[template].content = view.templates[template].content.replace(new RegExp('\\[include:\\s*'+ tmpl +'\\s*\\]'), content);
 				  
 				  self.include(template, view, callback);
