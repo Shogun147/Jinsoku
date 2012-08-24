@@ -13,6 +13,8 @@
 			scope: {}
 		},
 		
+		keys: '',
+		
 		template: null,
 		
 		parsers: {},
