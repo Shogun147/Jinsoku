@@ -62,7 +62,7 @@
 			
 			      b.content = b.prepend.join('') + b.content + b.append.join('');
 			
-			      view.templates[tpl].content = view.templates[tpl].content.replace('{#block:'+ block +'#}', b.content);
+			      view.templates[tpl].content = view.templates[tpl].content.replace('{#block:'+ block +'#}', self._parse_block(b.content));
 		      }
 	      }
 	
@@ -151,6 +151,26 @@
 
 		  template.content = template.content.replace(new RegExp('\\[\\/('+ Object.keys(self.parsers).join('|') +'|\/)\\]', 'g'), "'; } body += '");
 		},
+	
+	  	_parse_block: function(content) {
+			var self = this;
+
+			for (var parser in self.parsers) {
+			  parser = self.parsers[parser];
+
+			  content = content.replace(parser.regexp, function() {
+				  var args = Array.prototype.slice.call(arguments, 1);
+
+				  args.unshift(null, null);
+
+				  return parser.callback.apply(self, args);
+			  });
+		    }
+
+			content = content.replace(new RegExp('\\[\\/('+ Object.keys(self.parsers).join('|') +'|\/)\\]', 'g'), "'; } body += '");
+
+		    return content;
+		  },
 	
 	  extend: function(template, view, callback) {
 		  var self = this;
