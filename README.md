@@ -53,7 +53,7 @@ Ex. node.js:
     // @template - template path, [include: this/is/path] or [extend: view/path]
     // @callback - a callback which get template content as argument
     Jinsoku.template = function(template, callback) {
-      Fs.readFile(path + template + '.html', 'utf-8', function(error, callback) {
+      Fs.readFile(path + template + '.html', 'utf-8', function(error, content) {
         callback(content);
       })
     };
