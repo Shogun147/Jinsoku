@@ -2,6 +2,8 @@
 
 High performance Javascript template engine inspired by Jade's power and doT's speed.
 
+## WARNING: This is outdated, old code. I've started new version from the ground, fully rewrite. Comming soon.
+
 ## Contents
 
 - [Features](#features)
