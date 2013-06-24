@@ -1,353 +1,462 @@
-var Jinsoku = {
-	version: '0.1.0',
-	
-	settings: {
-		strip: true,
-		dataname: 'data',
-		extract: false,
-		import_deps: true,
-		wrap: false,
-		scope: {}
-	},
-	
-	keys: '',
-	
-	template: null,
-	
-	parsers: {},
-	
-	compile: function(template, options, callback) {
-		var self = this;
-		
-		if (typeof(options) == 'function') {
-			callback = options;
-			options = {};
-		}
-		
-		var fn;
-		
-		var view = {
-			content: '',
-			templates: {},
-			deps: [],
-			mixins: {},
-			pending: 1
-		}
-		
-		self.extend(template, view, function() {
-		  var templates = Object.keys(view.templates);
-		
-			view.templates[template].content = "var body = '"+ view.templates[template].content +"'; return body;";
-			
-			if (self.settings.extract) {
-				view.templates[template].content = "var __data = ''; for (var __k in data) { __data += ' var '+__k+' = data[\"'+__k+'\"];'; } eval(__data); __data = __k = undefined; " + view.templates[template].content;
-			}
-			
-      for (var i=templates.length; i>0; i--) {
-	      var tpl = view.templates[templates[i-1]];
-	
-	      for (var partial in tpl.partials) {
-		      view.templates[partial].content += tpl.partials[partial];
-	      }
-      }
+var Path = require('path');
+var Fs   = require('fs');
 
-      for (var tpl in view.templates) {
-	      self.parse(tpl, view);
-	
-	      for (var block in view.templates[tpl].blocks) {
-		      var b = view.templates[tpl].blocks[block];
-		
-		      b.content = b.prepend.join('') + b.content + b.append.join('');
-		
-		      view.templates[tpl].content = view.templates[tpl].content.replace('{#block:'+ block +'#}', self._parse_block(b.content));
-	      }
-      }
+var Async = require('async');
+var $     = require('cheerio');
 
-      for (var tpl in view.templates) {
-	      for (var partial in view.templates[tpl].partials) {
-		      view.templates[template].content = view.templates[template].content.replace('{#template:'+ partial +'#}', view.templates[partial].content);
-	      }
-      }
+var root = Path.dirname(process.mainModule.filename) + Path.sep;
 
-			if (self.settings.strip) {
-				view.templates[template].content = view.templates[template].content.replace(/(^|\r|\n)\t*\s+|\s+\t*(\r|\n|$)/g,' ').replace(/\r|\n|\t|\/\*[\s\S]*?\*\//g,'');
-			}
-			
-      view.templates[template].content = view.templates[template].content.replace(/\n/g, '\\n').replace(/\t/g, '\\t').replace(/\r/g, '\\r').replace(/\n/g, '');
+function merge() {
+  var options, name, source, copy, copy_array, clone;
+  var target = arguments[0] || {};
+  var length = arguments.length;
+  var deep   = true;
+  var i = 1;
 
-      if (self.settings.import_deps) {
-	      var defined = {};
-				view.deps.forEach(function(func) {
-					if (!defined[func]) {
-						view.templates[template].content = self[func].toString() + view.templates[template].content;
-
-						defined[fn] = true;
-					}
-				});
-      }
-      
-      fn = new Function(self.settings.dataname, view.templates[template].content);
-
-      if (self.settings.wrap) {
-	      fn = new Function('data', fn.toString() + " return anonymous.call(Jinsoku.settings.scope, data);");
-      }
-
-      callback && callback(fn);
-		});
-		
-		return fn;
-	},
-  
-  parse: function(template, view) {
-	  var self = this;
-	  var tpl = view.templates[template];
-	
-    tpl.content = tpl.content.replace(/\[(block|prepend|append):\s*([^\]]+)([!]?)\]([\s\S]*?)\[\/\1\]/g, function(m, action, name, clone, content) {
-		  var isnew = false;
-		
-			if (!tpl.blocks[name]) {
-				tpl.blocks[name] = {
-					content: '',
-					prepend: [],
-					append: []
-				};
-
-				isnew = true;
-			}
-			
-			if (action == 'block') {
-				tpl.blocks[name].content = content;
-				
-				return isnew || clone ? '{#block:'+ name +'#}' : '';
-			} else {
-				tpl.blocks[name][action].push(content);
-
-				return '';
-			}
-	  });
-	
-	  self._parse(template, view);
-  },
-
-	_parse: function(template, view) {
-		var self = this;
-		
-		var template = view.templates[template];
-		
-		for (var parser in self.parsers) {
-		  parser = self.parsers[parser];
-
-		  template.content = template.content.replace(parser.regexp, function() {
-			  var args = Array.prototype.slice.call(arguments, 1);
-
-			  args.unshift(template, view);
-
-			  return parser.callback.apply(self, args);
-		  });
-	  }
-
-	  template.content = template.content.replace(new RegExp('\\[\\/('+ Object.keys(self.parsers).join('|') +'|\/)\\]', 'g'), "'; } body += '");
-	},
-
-  	_parse_block: function(content) {
-		var self = this;
-
-		for (var parser in self.parsers) {
-		  parser = self.parsers[parser];
-
-		  content = content.replace(parser.regexp, function() {
-			  var args = Array.prototype.slice.call(arguments, 1);
-
-			  args.unshift(null, null);
-
-			  return parser.callback.apply(self, args);
-		  });
-	    }
-
-		content = content.replace(new RegExp('\\[\\/('+ Object.keys(self.parsers).join('|') +'|\/)\\]', 'g'), "'; } body += '");
-
-	    return content;
-	  },
-
-  extend: function(template, view, callback) {
-	  var self = this;
-	
-	  self.template(template, function(content) {
-		  content = content.replace(/`|'|\\/g, '\\$&');
-		
-			view.templates[template] = {
-				content: content,
-				partials: {},
-				blocks: {},
-				includes: 0
-			};
-
-      self.include(template, view, function() {
-        view.templates[template].content = view.templates[template].content.replace(/\[extend:\s*([^\]]+)\]([\s\S]*?)\[\/extend\]/g, function(m, tmpl, code) {
-					view.pending++;
-
-					view.templates[template].partials[tmpl] = code;
-
-					self.extend(tmpl, view, callback);
-
-					return '{#template:'+ tmpl +'#}';
-				});
-				
-				if (!--view.pending) {
-					callback();
-				}
-      });
-		});
-  },
-
-  include: function(template, view, callback) {
-	  var self = this;
-	
-	  var regexp = /\[include:\s*([^\]]+)\s*\]/g;
-	  var str = view.templates[template].content;
-	  var includes = [];
-	  var m;
-	  
-	  // TODO: use match instead of exec to get array of includes
-	  while ((m = regexp.exec(str)) != null) {
-		  includes.push(m[1]);
-	  }
-	
-	  view.templates[template].includes += includes.length;
-	
-	  if (!view.templates[template].includes) {
-		  callback && callback();
-	  }
-	
-	  includes.forEach(function(tmpl) {
-		  self.template(tmpl, function(content) {
-			  content = content.replace(/`|'|\\/g, '\\$&');
-			
-			  view.templates[template].content = view.templates[template].content.replace(new RegExp('\\[include:\\s*'+ tmpl +'\\s*\\]'), content);
-			  
-			  self.include(template, view, callback);
-			
-			  if (!--view.templates[template].includes) {
-				
-				  callback && callback();
-			  }
-		  });
-	  });
-  },
-
-  parser: function(name, regexp, callback) {
-		this.parsers[name] = {
-			regexp: regexp,
-			callback: callback
-		};
-	}
-};
-
-Jinsoku.parser('clone', /\[clone:\s*([^\]]+)\s*\]/g, function(template, view, block) {
-  return (template.blocks[block] && template.blocks[block].content || '#block: '+block+'#');
-});
-
-Jinsoku.parser('if', /\[if:([^\]]+)\]([\s\S]*?)\[\/if\]/g, function(template, view, condition, content) {
-  var self = this;
-
-	condition = self.unescape(condition);
-
-	var str = "'; if ("+ condition +") { body +='"+ content +"'; } body +='";
-
-	str = str.replace(/\[(?:else|:([^\]]+)?)\]/g, function(m, condition) {
-		return "'; } else "+ (condition ? "if ("+ self.unescape(condition) +")" : "") +"{ body +='";
-	});
-
-	return str;
-});
-
-Jinsoku.parser('each', /\[each:([^:\s]+)\s*(?::([^:\]]+))?\s*(?::([^:\]]+))?\]/g, function(template, view, items, key, iname) {
-  var self = this;
-
-	iname = iname || 'i';
-
-  items = self.unescape(items);
-
-	var str = "'; for (var "+ iname +"=0, _len="+items+".length; "+ iname +"<_len; "+ iname +"++) { var "+ key +" = "+ items +"["+ iname +"]; body += '";
-
-	return str;
-});
-
-Jinsoku.parser('for', /\[for:([^:\s]+)\s*(?::([^:\]]+))?\s*(?::([^:\]]+))?\]/g, function(template, view, items, key, iname) {
-	iname = iname || 'i';
-
-  items = this.unescape(items);
-
-	var str = "'; for (var "+ iname +" in "+ items +") { var "+ key +" = "+ items +"["+ iname +"]; body += '";
-
-	return str;
-});
-
-Jinsoku.parser('case', /\[case:\s*([^\]]+)\]([\s\S]*?)\[\/case\]/g, function(template, view, condition, content) {
-  var self = this;
-
-  var str = "'; switch("+ self.unescape(condition) +") { [content] ";
-
-  var cases = [];
-  var contents = [];
-
-  content = content.replace(/(\[:(?:([^\]]+))?\])/g, function(m, tag, condition) {
-    cases.push(condition || 'default');
-
-    return '[case]';
-  });
-
-  contents = content.split('[case]').slice(1);
-
-  var temp = '';
-
-  for (var i in cases) {
-  	temp += (cases[i] !== "default" ? " case "+ self.unescape(cases[i]) : " default") + ": body += '"+ contents[i] +"'; break;";
+  if (typeof(target) === 'boolean') {
+    depp = target;
+    target = arguments[1] || {};
+    i = 2;
   }
 
-  str += "} body += '";
+  if (typeof(target) !== 'object' && typeof(target) !== 'function') {
+    target = {};
+  }
 
-  str = str.replace('[content]', temp);
+  for (; i<length; i++) {
+    if ((options = arguments[i]) != null) {
+      for (name in options) {
+        source = target[name];
+        copy   = options[name];
 
-  return str;
-});
+        if (target === copy) { continue; }
 
-Jinsoku.parser('var', /(#|!)\[([\s\S]+?)\s*(?::([^\]]+))?\]/g, function(template, view, type, key, value) {
-	var code;
-	
-	var encode = type === '!';
-	
-	encode && view.deps.push('encodeHtml');
-	
-	key = key.replace(/^([a-z_$][a-z0-9_$\.\[\]\'\"]*)(.*)$/i, function(m, k, c) {
-		code = c;
-		
-		return k;
-	});
+        copy_array = copy instanceof Array;
 
-  code = this.unescape(code);
+        if (deep && copy && (typeof(copy)==='object' || copy_array)) {
+          if (copy_array) {
+            copy_array = false;
+            clone = source && typeof(source)==='array' ? source : [];
+          } else {
+            clone = source && typeof(source)==='object' ? source : {};
+          }
 
-	return value !== undefined ? "'; var "+ key +" = "+ value + code +"; body += '" : "'+ "+ (encode ? "encodeHtml" : "") +"("+ (code ? key+code : key) +") +'";
-});
+          target[name] = merge(deep, clone, copy);
+        } else if (copy !== undefined) {
+          target[name] = copy;
+        }
+      }
+    }
+  }
 
-Jinsoku.parser('evaluate', /\[#([\s\S]+?)#\]/g, function(template, view, code) {
-	return "'; "+ this.unescape(code) +" body += '";
-});
-
-Jinsoku.encodeHtml = function encodeHtml(code) {
-	var rules = { "&": "&#38;", "<": "&#60;", ">": "&#62;", "\"": "&#34;", "'": "&#39;", "\/": "&#47;", "`": "&#96;" };
-	var regexp = /&(?!#?\w+;)|<|>|"|'|\//g;
-	
-	return code ? code.toString().replace(regexp, function(m) { return rules[m] || m; }) : code;
+  return target;
 }
 
-Jinsoku.unescape = function unescape(code) {
-	return code.replace(/\\(\'|\\)/g, "$1").replace(/[\r\t\n]/g, ' ');
+var Jinsoku = {
+  templates: {},
+  cache: {},
+  parsers: [],
+
+  options: {
+    path: root +'views'+ Path.sep,
+    dataname: 'data',
+    extract: true,
+    cache: true,
+    extension: '.html'
+  },
+
+  set: function(key, value) {
+    if (typeof(key) === 'object') {
+      return this.options = merge(this.options, key);
+    }
+
+    this.options[key] = value;
+  },
+
+  resolve: function(path) {
+    return this.options.path + path.replace('.', '/') + this.options.extension;
+  },
+
+  template: function(path, callback) {
+    var self = this;
+
+    path = self.resolve(path);
+
+    if (self.options.cache && self.templates[path]) {
+      return callback(null, self.templates[path]);
+    }
+
+    Fs.readFile(path, 'utf-8', function(error, content) {
+      if (error) { return callback(error); }
+
+      content = content.replace(/\[include:\s*([^\]]+)\s*\]/g, function(match, partial) {
+        return '<js include="'+ partial +'"></js>';
+      });
+
+      content = $.load(content);
+
+      if (self.options.cache) {
+        self.templates[path] = content;
+      }
+
+      callback(null, content);
+    });
+  },
+
+  render: function(path, data, callback) {
+    var self = this;
+
+    if (typeof(data) === 'function') {
+      callback = data;
+      data = {};
+    }
+
+    var options = data.options ? merge(self.options, data.options) : self.options;
+
+    self.compile(path, function(error, fn) {
+      if (error) { return callback(error); }
+
+      callback(null, fn(data));
+    });
+  },
+
+  compile: function(template, callback) {
+    var self = this;
+
+    self.template(template, function(error, template) {
+      if (error) { return callback(error); }
+
+      Async.waterfall([
+        function(next) {
+          self.parseIncludes(template, next);
+        },
+        function(template, next) {
+          self.parseExtends(template, next);
+        },
+        function(template, next) {
+          self.parseBlocks(template, next);
+        },
+        function(template, next) {
+          self.prepareIterators(template, next);
+        },
+        function(template, next) {
+          self._compile(template, next);
+        }
+      ], function(error, fn) {
+        callback(error, fn);
+      });
+    });
+  },
+
+  parser: function(fn) {
+    this.parsers.push(fn.bind(this));
+  },
+
+  prepareIterators: function(template, callback) {
+    var self = this;
+
+    template('[j\\:for], js[for], [j\\:each], js[each]').each(function(i, item) {
+      item = $(item);
+
+      var js = item[0].name === 'js';
+      var statement = 'for';
+      var attr = item[0].attribs[js ? 'for' : 'j:for'];
+
+      if (!attr) {
+        statement = 'each';
+        attr = item[0].attribs[js ? 'each' : 'j:each'];
+      }
+
+      //var attrName = (js ? '' : 'j:') + statement;
+
+      if (js) {
+        item.replaceWith('['+ statement +':'+ attr +']'+ item.html() +'[/'+ statement +']');
+      } else {
+        item.prepend('['+ statement +':'+ attr +']');
+        item.append('[/'+ statement +']');
+        item.removeAttr((js ? '' : 'j:') + statement);
+      }
+    });
+
+    callback(null, template);
+  },
+  
+  _compile: function(template, callback) {
+    var self = this;
+
+    var content = template.html().replace(/'|\\/g, '\\$&');
+
+    content = content.replace(new RegExp('\\[\\/(for|each|if|\/)\\]', 'g'), "'; } body += '");
+
+    Async.waterfall([function(next) { next(null, content); }].concat(self.parsers), function(error, content) {
+      if (error) {
+        return callback(error);
+      }
+
+      content = "var body = '"+ content +"'; return body;";
+
+      if (self.options.extract) {
+        content = "var __data = __k = ''; for (__k in data) { __data += ' var '+__k+' = "+ self.options.dataname +"[\"'+__k+'\"];'; } eval(__data); __data = __k = undefined; " + content;
+      }
+
+      content = content.replace(/\n/g, '\\n').replace(/\t/g, '\\t').replace(/\r/g, '\\r').replace(/\n/g, '');
+
+      var fn = new Function(self.options.dataname, content);
+      
+      callback(null, fn);
+    });
+  },
+
+  parseExtends: function(template, callback) {
+    var self = this;
+    var includes = template('js[extend], [js-extend]');
+
+    if (!includes) {
+      return callback(null, template);
+    }
+
+    Async.forEach(includes, function(node, cb) {
+      node = $(node);
+
+      var statement = $(node)[0].name === 'js';
+      var templateName = statement ? node.attr('extend') : node.attr('js-extend');
+
+      if (!statement) {
+        node.removeAttr('js-extend');
+      }
+
+      self.template(templateName, function(error, partial) {
+        if (error) { return cb(error); }
+
+        self.parseIncludes(partial, function(error, tmpl) {
+          if (error) { return cb(error); }
+
+          node.prepend(tmpl.html());
+
+          self.parseBlocks(node, function(error, template) {
+            node.html(template.html());
+
+            cb(error);
+          });
+        });
+      });
+    }, function(error) {
+      callback(error, template);
+    });
+  },
+
+  parseBlocks: function(template, callback) {
+    var self = this;
+    var blocks = {};
+
+    template = $.load(template.html());
+
+    template('js[block], [js-block]').each(function(i, tag) {
+      var isobject  = tag.name !== 'js';
+      var blockName = isobject ? tag.attribs['js-block'] : tag.attribs.block;
+      var isnew     = !blocks[blockName];
+
+      blocks[blockName] = {
+        selector: isobject ? '[js-block='+ blockName +']' : 'js[block='+ blockName +']',
+        content: isobject ? $('<div/>').append($(tag).clone().removeAttr('js-block')).html() : $(tag).html(),
+        isobject: isobject
+      };
+
+      if (!isnew) {
+        $(tag).remove();
+      }
+    });
+
+    template('js[prepend], [js-prepend]').each(function(i, tag) {
+      var blockName = tag.name === 'js' ? tag.attribs.prepend : tag.attribs['js-prepend'];
+      var selector = tag.name === 'js' ? 'js[prepend='+ blockName +']' : '[js-prepend='+ blockName +']';
+
+      if (blocks[blockName]) {
+        var prepend = tag.name==='js' ? $(tag).html() : $('<div/>').append($(tag).clone().removeAttr('js-prepend')).html();
+
+        if (blocks[blockName].isobject) {
+          blocks[blockName].content = $('<div/>').append($(blocks[blockName].content).prepend(prepend)).html();
+        } else {
+          blocks[blockName].content = prepend + blocks[blockName].content;
+        }
+      }
+
+      template(selector).remove();
+    });
+
+    template('js[append], [js-append]').each(function(i, tag) {
+      var blockName = tag.name === 'js' ? tag.attribs.append : tag.attribs['js-append'];
+      var selector = tag.name === 'js' ? 'js[append='+ blockName +']' : '[js-append='+ blockName +']';
+
+      if (blocks[blockName]) {
+        var append = tag.name==='js' ? $(tag).html() : $('<div/>').append($(tag).clone().removeAttr('js-append')).html();
+
+        if (blocks[blockName].isobject) {
+          blocks[blockName].content = $('<div/>').append($(blocks[blockName].content).append(append)).html();
+        } else {
+          blocks[blockName].content += append;
+        }
+      }
+
+      template(selector).remove();
+    });
+
+    for (blockName in blocks) {
+      template(blocks[blockName].selector).replaceWith(blocks[blockName].content);
+    }
+
+    callback(null, template);
+  },
+
+  parseIncludes: function(template, callback) {
+    var self = this;
+
+    var includes = template('js[include], [js-include]');
+
+    if (!includes) {
+      return callback(null, template);
+    }
+
+    Async.forEach(includes, function(node, cb) {
+      node = $(node);
+
+      var statement = node[0].name === 'js';
+      var partialName = statement ? node.attr('include') : node.attr('js-include');
+      var method = statement ? 'replaceWith' : 'html';
+
+      if (!statement) {
+        node.removeAttr('js-include');
+      }
+
+      self.template(partialName, function(error, partial) {
+        if (error) { return cb(error); }
+
+        self.parseIncludes(partial, function(error, tmpl) {
+          if (error) { return cb(error); }
+
+          node[method](partial.html());
+
+          cb();
+        });
+      });
+    }, function(error) {
+      callback(error, template);
+    });
+  },
+
+  unescape: function(code) {
+    return code.replace(/\\(\'|\\)/g, "$1").replace(/[\r\t\n]/g, ' ');
+  }
+};
+
+function trim(str) {
+  return str.replace(/^\s*/, '').replace(/\s*$/, '');
 }
-	
-module.exports = global.Jinsoku = Jinsoku;
 
+// if
+Jinsoku.parser(function(template, next) {
+  var self = this;
 
+  template = template.replace(/\[if:([^\]]+)\]([\s\S]*?)\[\/if\]/g, function(m, condition, content) {
+    var str = "'; if ("+ trim(condition) +") { body +='"+ content +"'; } body +='";
 
+    str = str.replace(/\[(?:else|:([^\]]+)?)\]/g, function(m, condition) {
+      return "'; } else "+ (condition ? "if ("+ trim(self.unescape(condition)) +")" : "") +"{ body +='";
+    });
+
+    return str;
+  });
+
+  next(null, template);
+});
+
+// case
+Jinsoku.parser(function(template, next) {
+  var self = this;
+
+  template = template.replace(/\[case:\s*([^\]]+)\]([\s\S]*?)\[\/case\]/g, function(m, condition, content) {
+    var str = "'; switch("+ self.unescape(condition) +") { [content] ";
+
+    var cases = [];
+    var contents = [];
+
+    content = content.replace(/(\[:(?:([^\]]+))?\])/g, function(m, tag, condition) {
+      cases.push(condition || 'default');
+
+      return '[case]';
+    });
+
+    contents = content.split('[case]').slice(1);
+
+    var temp = '';
+
+    for (var i in cases) {
+      temp += (cases[i] !== "default" ? " case "+ self.unescape(cases[i]) : " default") + ": body += '"+ contents[i] +"'; break;";
+    }
+
+    str += "} body += '";
+    str = str.replace('[content]', temp);
+
+    return str;
+  });
+
+  next(null, template);
+});
+
+// each
+Jinsoku.parser(function(template, next) {
+  var self = this;
+
+  template = template.replace(/\[each:([^:\s]+)\s*(?::([^:\]]+))?\s*(?::([^:\]]+))?\]/g, function(m, items, key, iname) {
+    iname = iname || 'i';
+    items = self.unescape(items);
+
+    var str = "'; for (var "+ iname +"=0, _len="+items+".length; "+ iname +"<_len; "+ iname +"++) { var "+ key +" = "+ items +"["+ iname +"]; body += '";
+
+    return str;
+  });
+
+  next(null, template);
+});
+
+// for
+Jinsoku.parser(function(template, next) {
+  var self = this;
+
+  template = template.replace(/\[for:([^:\s]+)\s*(?::([^:\]]+))?\s*(?::([^:\]]+))?\]/g, function(m, items, key, iname) {
+    iname = iname || 'i';
+    items = this.unescape(items);
+
+    var str = "'; for (var "+ iname +" in "+ items +") { var "+ key +" = "+ items +"["+ iname +"]; body += '";
+
+    return str;
+  });
+
+  next(null, template);
+});
+
+// var
+Jinsoku.parser(function(template, next) {
+  var self = this;
+
+  template = template.replace(/(#|!)\[([\s\S]+?)\s*(?::([^\]]+))?\]/g, function(m, type, key, value) {
+    var code;
+    var encode = type === '!';
+    
+    key = key.replace(/^([a-z_$][a-z0-9_$\.\[\]\'\"]*)(.*)$/i, function(m, k, c) {
+      code = c;
+      
+      return k;
+    });
+
+    code = self.unescape(code);
+
+    return value !== undefined ? "'; var "+ key +" = "+ value + code +"; body += '" : "'+ "+ (encode ? "encodeHtml" : "") +"("+ (code ? key+code : key) +") +'";
+  });
+
+  next(null, template);
+});
+
+module.exports = Jinsoku;
 
 
