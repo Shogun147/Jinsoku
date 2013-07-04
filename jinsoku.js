@@ -84,21 +84,22 @@ var Jinsoku = {
 
     path = self.resolve(path);
 
+    Fs.readFile(path, 'utf-8', function(error, content) {
+      if (error) { return callback(error); };
+
+      callback(null, content);
+    });
+  },
+
+  _template: function(path, callback) {
+    var self = this;
+
     if (self.options.cache && self.templates[path]) {
       return callback(null, self.templates[path]);
     }
 
-    Fs.readFile(path, 'utf-8', function(error, content) {
-      if (error) { return callback(error); };
-
-      content = content.replace(/\[(include|extend|block|prepend|append):\s*([^\]]+)\s*\]/g, function(m, action, template) {
-        var tag = '<js '+ action +'="'+ template +'">'+ (action==='include' ? '</js>' : '');
-
-        return tag;
-      });
-      content = content.replace(/\[\/(extend|block|prepend|append)\]/g, function(m, action, template) { return '</js">'; });
-
-      content = $.load(content);
+    self.template(path, function(error, content) {
+      content = self.preparePartials(content);
 
       if (self.options.cache) {
         self.templates[path] = content;
@@ -106,6 +107,17 @@ var Jinsoku = {
 
       callback(null, content);
     });
+  },
+
+  preparePartials: function(content) {
+    content = content.replace(/\[(include|extend|block|prepend|append):\s*([^\]]+)\s*\]/g, function(m, action, template) {
+      var tag = '<js '+ action +'="'+ template +'">'+ (action==='include' ? '</js>' : '');
+
+      return tag;
+    });
+    content = content.replace(/\[\/(extend|block|prepend|append)\]/g, function(m, action, template) { return '</js">'; });
+
+    return content;
   },
 
   render: function(path, data, callback) {
