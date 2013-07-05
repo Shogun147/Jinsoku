@@ -140,7 +140,7 @@ var Jinsoku = {
   compile: function(path, callback) {
     var self = this;
 
-    self.template(path, function(error, template) {
+    self._template(path, function(error, template) {
       if (error) { return callback(error); }
 
       Async.waterfall([
@@ -250,7 +250,7 @@ var Jinsoku = {
         node.removeAttr(attr);
       }
 
-      self.template(templateName, function(error, partial) {
+      self._template(templateName, function(error, partial) {
         if (error) { return cb(error); }
 
         self.parseIncludes(partial, function(error, tmpl) {
@@ -332,6 +332,8 @@ var Jinsoku = {
   parseIncludes: function(template, callback) {
     var self = this;
 
+    template = $.load(template);
+
     var includes = template('js[include], [js-include], [j\\:include]');
 
     if (!includes) {
@@ -352,7 +354,7 @@ var Jinsoku = {
         node.removeAttr(attr);
       }
 
-      self.template(partialName, function(error, partial) {
+      self._template(partialName, function(error, partial) {
         if (error) { return cb(error); }
 
         self.parseIncludes(partial, function(error, tmpl) {
