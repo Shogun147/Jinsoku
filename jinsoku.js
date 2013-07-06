@@ -212,7 +212,7 @@ var Jinsoku = {
 
     var content = template.html().replace(/'|\\/g, '\\$&');
 
-    content = content.replace(new RegExp('\\[\\/(for|each|if|\/)\\]', 'g'), "'; } body += '");
+    content = content.replace(new RegExp('\\[\\/(for|each|\/)\\]', 'g'), "'; } body += '");
 
     Async.waterfall([function(next) { next(null, content); }].concat(self.parsers), function(error, content) {
       if (error) {
@@ -376,7 +376,7 @@ var Jinsoku = {
 };
 
 function trim(str) {
-  return str.replace(/^\s*/, '').replace(/\s*$/, '');
+  return str.replace(/^\s+|\s+$/g, '');
 }
 
 // if
