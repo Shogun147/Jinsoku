@@ -84,13 +84,13 @@ Jinsoku.compile(path, function(error, fn) {
 
   fn(data);
 });
-```
 
 // render template
 // this will compile template and generated function
 Jinsoku.render(path, function(error, content) {
   log(error || content);
 });
+```
 
 ### Options
 
@@ -120,6 +120,7 @@ Jinsoku.compile(path, { dataname: 'locals' }, ...);
 Jinsoku allow different ways to define template.
 
 * As attributes
+
 ```html
 
 // include partial into tag
@@ -133,6 +134,7 @@ Jinsoku allow different ways to define template.
 ```
 
 * As `<js>` tag
+
 ```html
 
 // extend some template
@@ -142,6 +144,7 @@ Jinsoku allow different ways to define template.
 <js block="scripts"></js>
 ```
 * With square brackets
+
 ```html
 
 // simple include
@@ -151,7 +154,6 @@ Jinsoku allow different ways to define template.
 [each:users :user:i]
   #[i+1]. #[user.username]<br>
 [/each]
-
 ```
 
 ## Template inheritance
@@ -174,7 +176,7 @@ Now to extend this template in home.html:
 ```
 
 and result will be:
-
+```html
 <body>
   <div id="content">
     <h2>Page title</h2>
@@ -182,6 +184,7 @@ and result will be:
   </div>
   <div id="copyright">&copy; 2013 MyCompany</div>
 </body>
+```
 
 ## Includes
 
@@ -331,7 +334,7 @@ Jinsoku has shortcut support for `if` and `switch` statements.
 #[page.title:'Jinsoku Template Engine']
 ```
 
-### Unbuffered code for conditionals and anything else
+#### Unbuffered code for conditionals and anything else
 ```html
 [# var keywords = ['template', 'mvc', 'dom', 'node.js']; #]
 
