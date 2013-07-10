@@ -2,19 +2,17 @@
 
 High performance Javascript template engine inspired by Jade's power and doT's speed.
 
-## WARNING: This is outdated, old code. I've started new version from the ground, fully rewrite. Comming soon.
-
 ## Contents
 
 - [Features](#features)
 - [Installation](#installation)
 - [Browser support](#browser-support)
 - [Public API](#public-api)
-    - [Settings](#options)
+    - [Options](#options)
 - [Syntax](#syntax)
     - [Template inheritance](#template-inheritance)
     - [Template includes](#includes)
-    - [Block extending/clone/prepend/append](#blocks)
+    - [Blocks](#blocks)
     - [Array and Object iterators](#array-and-object-iterators)
     - [Conditionals](#conditionals)
 - [Examples](#examples)
@@ -23,14 +21,13 @@ High performance Javascript template engine inspired by Jade's power and doT's s
 
 ## Features
 
-- Fast & Furious
-- Client-side support
 - Template inheritance
 - Static includes
 - Asynchronous partials loading support
 - Blocks extending and cloning
 - Iterators and Conditionals
 - Extensible
+...
 
 ## Installation
 
@@ -40,287 +37,332 @@ via npm:
 
 ### Browser support
 
-Jinsoku has no dependencies so you could just require it.
+Comming soon.
 
 ## Public API
 
-Before compile something we need to set `Jinsoku.template` function, this is used to get content for a template path. It also support async loading.
+* `resolve` resolve path to template files
+* `template` read templates content
+* `compile` compile template into function
+* `render` compile and run template
 
-Ex. node.js:
+```javascript
+var Path = require('path');
+var Fs   = require('fs');
 
-    var path    = process.cwd() + '/views/';
-    var Fs      = require('fs');
-    var Jinsoku = require('jinsoku');
+var Jinsoku = require('jinsoku');
 
-    // @template - template path, [include: this/is/path] or [extend: view/path]
-    // @callback - a callback which get template content as argument
-    Jinsoku.template = function(template, callback) {
-      Fs.readFile(path + template + '.html', 'utf-8', function(error, content) {
-        callback(content);
-      })
-    };
+var root = process.cwd() + Path.sep;
 
-Ex. browser:
+// resolve paths to template files
+Jinsoku.resolve = function(path) {
+  return Path.join(root, 'views', path) + '.html';
+}
 
-    <script type="text/javascript" src="/jinsoku.js"></script>
-    <script type="text/javascript">
-      Jinsoku.template = function(template, callback) {
-        // use jQuery ajax call
-        $.ajax({
-          url: '/views/'+template+'.html'
-        }).done(function(content) {
-          callback(content);
-        });
-      }
-    </script>
+// get template content from file system, cache or anythig else
+Jinsoku.template = function(path, callback) {
+  var self = this;
 
-Then we can compile templates:
+  path = self.resolve(path);
 
-    // For sync templates loading compiled function is also returned
-    var fn = Jinsoku.compile('home'); // home.html template
+  if (self.cache[path]) { callback(null, self.cache[path]); }
 
-    fn(locals);
+  Fs.readFile(path, 'utf-8', function(error, content) {
+    if (error) { return callback(error); }
 
-    // but for async loading we must wait it from callback
-    Jinsoku.compile('home', function(fn) {
-      fn(locals);
-    });
+    self.cache[path] = content;
+
+    callback(null, content);
+  });
+}
+
+var path = 'home'; // this template path after resolving will be: /path/to/app/views/home.html
+
+// compile template to function
+Jinsoku.compile(path, function(error, fn) {
+  if (error) { throw error; }
+
+  fn(data);
+});
+```
+
+// render template
+// this will compile template and generated function
+Jinsoku.render(path, function(error, content) {
+  log(error || content);
+});
 
 ### Options
 
-Before compile you could set some options in `Jinsoku.settings`:
+- `path`: `root +'views'+ Path.sep` Default root path for templates
+- `dataname`: `data` Locals variable object name
+- `extract`: `true` Extract data to local scope. If false, locals will be available as `dataname.varname`.
+- `cache`: `true` Cache files content.
+- `extension`: `.html` Default template file extension.
 
-- `strip`: `true` - Strip whitespaces of the html output or not.
-- `dataname`: `data` - Locals variable object.
-- `extract`: `false` - Extract locals to local scope. When `true` locals are available directly, without `dataname` prefix, but compiled function will run slower.
-- `import_deps`: `true` - If dependencies should be included in compiled template or not.
-- `wrap`: `false` - Wrap function into a scope or not, if `false` then `this` is global scope.
-- `scope`: `{}` - The scope in which fn runs if `wrap=true`.
+To set options we can call:
+```javascript
+Jinsoku.set('cache', false);
+// or
+Jinsoku.set({ cache: false, extension: '.tpl' });
+// or set them as data.options when call render
+var data = {
+  ...
+  options: { cache: false }
+}
+Jinsoku.render(path, data, ...);
+// as second argument for compile
+Jinsoku.compile(path, { dataname: 'locals' }, ...);
+
+```
+
+## Syntax
+Jinsoku allow different ways to define template.
+
+* As attributes
+```html
+
+// include partial into tag
+<head j:include="layout/head"></head>
+<head js-include="layout/head"></head>
+
+// each iterator over array
+<ul j:each="users :user">
+  <li>#[user.username]</li>
+</ul>
+```
+
+* As `<js>` tag
+```html
+
+// extend some template
+<js extend="footer"></js>
+
+// define a block
+<js block="scripts"></js>
+```
+* With square brackets
+```html
+
+// simple include
+[include: auth/login]
+
+// array iterator
+[each:users :user:i]
+  #[i+1]. #[user.username]<br>
+[/each]
+
+```
 
 ## Template inheritance
 
 Jinsoku supports template inheritance via `extend` keyword.
 
 Suppose we have the following template content.html:
-
-    <div id="content">
-      <h2>Page title</h2>
-      <p>Page content</p>
-    </div>
+```html
+<div id="content">
+  <h2>Page title</h2>
+  <p>Page content</p>
+</div>
+```
 
 Now to extend this template in home.html:
-
-    [extend: content]
-      <div id="copyright">&copy; 2012 MyCompany</div>
-    [/extend]
+```html
+<body j:extend="content">
+  <div id="copyright">&copy; 2012 MyCompany</div>
+</body>
+```
 
 and result will be:
 
-    <div id="content">
-      <h2>Page title</h2>
-      <p>Page content</p>
-    </div>
-    <div id="copyright">&copy; 2012 MyCompany</div>
-
-We could extend more templates at the same time which will compile to one bigger.
-
-For example home.html:
-
-    <!DOCTYPE HTML>
-    <html lang="en-US">
-      <head>
-        [extend: head]
-          <title>Jinsoku Template Engine</title>
-        [/extend]
-      </head>
-    <body>
-      [extend: top][/extend]
-  
-      [extend: content][/extend]
-  
-      [extend: footer][/extend]
-    </body>
-    </html>
+<body>
+  <div id="content">
+    <h2>Page title</h2>
+    <p>Page content</p>
+  </div>
+  <div id="copyright">&copy; 2013 MyCompany</div>
+</body>
 
 ## Includes
 
 Includes allow you to statically include parts of content.
 
-For example home.html which has body in separate file:
-
-    <!DOCTYPE HTML>
-    <html lang="en-US">
-      <head>
-        [extend: head]
-          <title>Jinsoku Template Engine</title>
-        [/extend]
-      </head>
-    <body>
-      [include: body]
-    </body>
-    </html>
-
-and body.html:
-
-    [extend: top][/extend]
-  
-    [extend: content][/extend]
-  
-    [extend: footer][/extend]
+For example home.html which has head and body in separate files:
+```html
+<!doctype html>
+<html lang="en-US">
+  <head j:include="head"></head>
+<body j:include="body">
+  // or here [include: body]
+</body>
+</html>
+```
 
 ## Blocks
 
-Each template could be splitted in more parts named blocks.Then after we extend this template we may replace content of the blocks, prepend and append content, or even clone them.
+Each template could be splitted in more parts named blocks.Then after extending this template we may replace content of the blocks, prepend and append content, or even clone them.
 
 Suppose we have this head.html template:
-
-    <head>
-      [block: meta]
-        <meta charset="utf-8">
-      [/block]
-      [block: scripts]
-        <script type="text/javascript" src="/public/scripts/jquery.js"></script>
-      [/block]
-    </head>
+```html
+[block: meta]
+  <meta charset="utf-8">
+[/block]
+<js block="scripts">
+  <script type="text/javascript" src="/public/scripts/jquery.js"></script>
+</js>
+```
 
 now in home.html to extend and add something to our head:
+```html
+<!doctype html>
+<html lang="en-US">
+<head j:extend="head">
+  <meta name="keywords" content="Node.js, Javascript, HTML, CSS" j:append="meta">
+  <script type="text/javascript" src="/public/scripts/app.js" j:append="scripts"></script>
+</head>
+<body>
+  Body content
+</body>
+</html>
+```
 
-    <!DOCTYPE HTML>
-    <html lang="en-US">
-    [extend: head]
-      [append: meta]
-        <meta name="keywords" content="Node.js, JavaScript, HTML, CSS">
-      [/append]
-      [append: scripts]
-        <script type="text/javascript" src="/public/scripts/app.js"></script>
-      [/append]
-    [/extend]
-    <body>
-      Body content
-    </body>
-    </html>
-
-this will add meta tag to meta block and app.js script to scripts block so final home.html will look like: 
-
-    <!DOCTYPE HTML>
-    <html lang="en-US">
-    <head>
-      <meta charset="utf-8">
-      <meta name="keywords" content="Node.js, JavaScript, HTML, CSS">
-      <script type="text/javascript" src="/public/scripts/jquery.js"></script>
-      <script type="text/javascript" src="/public/scripts/app.js"></script>
-    </head>
-    <body>
-      Body content
-    </body>
-    </html>
+this will add meta tag to meta block and app.js script to scripts block so final home.html will look like so:
+```html
+<!doctype html>
+<html lang="en-US">
+<head>
+  <meta charset="utf-8">
+  <meta name="keywords" content="Node.js, JavaScript, HTML, CSS">
+  <script type="text/javascript" src="/public/scripts/jquery.js"></script>
+  <script type="text/javascript" src="/public/scripts/app.js"></script>
+</head>
+<body>
+  Body content
+</body>
+</html>
+```
 
 To replace a block we need just to redefine it:
-
-    [extend: head]
-      [block: meta]
-        <meta name="keywords" content="Node.js, JavaScript, HTML, CSS">
-      [/block]
-    [/extend]
-
-Now meta block will contain only meta keywords without the charset.
-
-There also is the possibility to clone a block at the same time. To do this just add exclamation mark after block name and the block will be cloned in this place.
-
-    [append: menu!]
-      <li><a href="/about">About</a></li>
-    [/append]
-
-This will append new item to the menu and clone entire menu in this place.
-
-To just clone a block use `clone`:
-
-    [clone: pagination]
+```html
+// replace scripts block
+<head j:extend="head">
+  [block: scripts]
+  <script src="/public/scripts/main.js"></script>
+  [/block]
+</head>
+// now scripts block will contain only main.js script 
+```
 
 ## Array and Object iterators
 
 Jinsoku also supports friendly iterators over arrays(each) and objects(for).
 
 For arrays:
+var items = ['one', 'two', 'three', 'four'];
 
-    [# var items = ['one', 'two', 'three', 'four']; #]
+```html
+<ul j:each="items :item:i">
+  <li>#[i]. #[item]</li>
+</ul>
 
-    [each:items :item]
-      <li>#[item]</li>
-    [/each]
-    
-    //result
-    <li>one</li>
-    <li>two</li>
-    <li>three</li>
-    <li>four</li>
+// or
+<js each="items :item:i">
+  #[i]. #[item]<br>
+</js>
 
-    //with index:
-    [each:items :item:i]
-      <li>#[i+1]. #[item]</li>
-    [/each]
-
-    //result
-    <li>1. one</li>
-    <li>2. two</li>
-    <li>3. three</li>
-    <li>4. four</li>
+// or
+[each:items :item:i]
+  #[i]. #[item]<br>
+[/each]
+```
+`i` is current index, optional
 
 For objects:
+var obj = { foo: 'bar' };
 
-    [# var obj = { foo: 'bar' }; #]
+```html
+<ul j:for="obj :value:key">
+  <li>#[key]: #[value]</li>
+</ul>
 
-    [for:obj :value:key]
-      <li>#[key]: #[value]</li>
-    [/for]
+// or
+<js for="obj :value:key">
+  #[key]: #[value]<br>
+</js>
 
-    //result
-    <li>foo: bar</li>
+// or
+[for:obj :value:key]
+  #[key]: #[value]<br>
+[/for]
+```
 
 ## Conditionals
 
 Jinsoku has shortcut support for `if` and `switch` statements.
+```html
+[if: User.logged_in]              // if (User.logged_in) {
+  Welcome back, #[User.username]!
+[: User.banned]                   // else if (User.banned) {
+  Access denied, you are banned!
+[:]                               // else {
+  Hello guest, please login!
+[/if]                             // }
 
-    [if: User.logged_in]              // if (User.logged_in) {
-      Welcome back, #[User.username]!
-    [: User.banned]                   // else if (User.banned) {
-      Access denied, you are banned!
-    [:]                               // else {
-      Hello guest, please login!
-    [/if]                             // }
+[case: User.role]                      // switch(User.role) {
+  [:'administrator']                   // case 'administrator':
+    #[User.username] is administrator.
+  [:'moderator']                       // break; case 'moderator':
+    #[User.username] is moderator.
+  [:]                                  // break; default:
+    #[User.username] is user.
+[/case]                                // break; }
+```
 
-    [case: User.role]                      // switch(User.role) {
-      [:'administrator']                   // case 'administrator':
-        #[User.username] is administrator.
-      [:'moderator']                       // break; case 'moderator':
-        #[User.username] is moderator.
-      [:]                                  // break; default:
-        #[User.username] is user.
-    [/case]                                // break; }
+## Variables
 
+```html
+// simple
+<h2>#[page.title]</h2>
+
+// escape html
+<p>![page.content]</p>
+
+// set a variable
+#[page.title:'Jinsoku Template Engine']
+```
+
+### Unbuffered code for conditionals and anything else
+```html
+[# var keywords = ['template', 'mvc', 'dom', 'node.js']; #]
+
+[# if (keywords.indexOf('mvc')) { #]
+  Yahooo!
+[# } else { #]
+  Ooops!
+[# } #]
+```
 
 ## Examples
 
-One more complex example:
 
 ## Extending
 
 You can easily extend jinsoku by adding new or replace one of the  existing parsers(if, case, each, for, var, evaluate).
 
 To register a parser:
+```javascript
+Jinsoku.parser(function(template, next) {
+  // do what you need with template
+  // call next parser
+  next(null, template);
+});
+```
 
-    @name - parser name, if the parser with same name already exists then he will be replaced by this one
-    @regexp - regular expression for parser
-    @callback - callback for regexp matching, it gets template name and view object as first 2 arguments and then arguments of the regexp match
-    Jinsoku.parser(name, regexp, callback);
-
-The returned value from callback is used as replacer for regexp match.
-    
 ## License
 
 The MIT License
 
-Copyright © 2012 D.G. Shogun Shogun147@gmail.com
+Copyright © 2013 D.G. Shogun147@gmail.com
 
 
 

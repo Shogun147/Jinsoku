@@ -128,17 +128,26 @@ var Jinsoku = {
       data = {};
     }
 
-    var options = data.options ? merge(self.options, data.options) : self.options;
+    var options = data.options ? merge(self.options, data.options) : self.options; 
 
-    self.compile(path, function(error, fn) {
+    data.options && (delete data.options);
+
+    self.compile(path, options, function(error, fn) {
       if (error) { return callback(error); }
 
       callback(null, fn(data));
     });
   },
 
-  compile: function(path, callback) {
+  compile: function(path, options, callback) {
     var self = this;
+
+    if (typeof(options) === 'function') {
+      callback = options;
+      options = {};
+    }
+
+    self.set(options);
 
     self._template(path, function(error, template) {
       if (error) { return callback(error); }
@@ -176,12 +185,8 @@ var Jinsoku = {
       item = $(item); 
 
       var attribs = {
-        'j:for': 'for',
-        'j-for': 'for',
-        'for': 'for',
-        'j:each': 'each',
-        'j-each': 'each',
-        'each': 'each'
+        'j:for': 'for',   'j-for': 'for',   'for': 'for',
+        'j:each': 'each', 'j-each': 'each', 'each': 'each'
       };
 
       var js = item[0].name === 'js';
@@ -270,6 +275,7 @@ var Jinsoku = {
     });
   },
 
+  // TODO: make blocks globals?
   parseBlocks: function(templateName, template, callback) {
     var self = this;
     
@@ -478,6 +484,17 @@ Jinsoku.parser(function(template, next) {
     code = self.unescape(code);
 
     return value !== undefined ? "'; var "+ key +" = "+ value + code +"; body += '" : "'+ "+ (encode ? "encodeHtml" : "") +"("+ (code ? key+code : key) +") +'";
+  });
+
+  next(null, template);
+});
+
+// evaluate
+Jinsoku.parser(function(template, next) {
+  var self = this;
+
+  template = template.replace(/\[#([\s\S]+?)#\]/g, function(m, code) {
+    return "'; "+ self.unescape(code) +" body += '";
   });
 
   next(null, template);
