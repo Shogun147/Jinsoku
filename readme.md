@@ -125,7 +125,7 @@ Jinsoku allow different ways to define template.
 
 // include partial into tag
 <head j:include="layout/head"></head>
-<head js-include="layout/head"></head>
+<head j-include="layout/head"></head>
 
 // each iterator over array
 <ul j:each="users :user">
@@ -133,15 +133,15 @@ Jinsoku allow different ways to define template.
 </ul>
 ```
 
-* As `<js>` tag
+* As `<j>` tag
 
 ```html
 
 // extend some template
-<js extend="footer"></js>
+<j extend="footer"></j>
 
 // define a block
-<js block="scripts"></js>
+<j block="scripts"></j>
 ```
 * With square brackets
 
@@ -210,9 +210,9 @@ Suppose we have this head.html template:
 [block: meta]
   <meta charset="utf-8">
 [/block]
-<js block="scripts">
+<j block="scripts">
   <script type="text/javascript" src="/public/scripts/jquery.js"></script>
-</js>
+</j>
 ```
 
 now in home.html to extend and add something to our head:
@@ -269,9 +269,9 @@ var items = ['one', 'two', 'three', 'four'];
 </ul>
 
 // or
-<js each="items :item:i">
+<j each="items :item:i">
   #[i]. #[item]<br>
-</js>
+</j>
 
 // or
 [each:items :item:i]
@@ -289,9 +289,9 @@ var obj = { foo: 'bar' };
 </ul>
 
 // or
-<js for="obj :value:key">
+<j for="obj :value:key">
   #[key]: #[value]<br>
-</js>
+</j>
 
 // or
 [for:obj :value:key]

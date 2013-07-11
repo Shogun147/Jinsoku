@@ -1,5 +1,6 @@
 * Update docs
 * Add examples
+* Allow custom prefix?
 
 * Issues
   * Prevent creation of unexpected new lines
