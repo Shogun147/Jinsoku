@@ -111,11 +111,11 @@ var Jinsoku = {
 
   preparePartials: function(content) {
     content = content.replace(/\[(include|extend|block|prepend|append):\s*([^\]]+)\s*\]/g, function(m, action, template) {
-      var tag = '<js '+ action +'="'+ template +'">'+ (action==='include' ? '</js>' : '');
+      var tag = '<j '+ action +'="'+ template +'">'+ (action==='include' ? '</j>' : '');
 
       return tag;
     });
-    content = content.replace(/\[\/(extend|block|prepend|append)\]/g, function(m, action, template) { return '</js">'; });
+    content = content.replace(/\[\/(extend|block|prepend|append)\]/g, function(m, action, template) { return '</j">'; });
 
     return content;
   },
@@ -181,7 +181,7 @@ var Jinsoku = {
   prepareIterators: function(template, callback) {
     var self = this;
 
-    template('[j\\:for], [j-for], js[for], [j\\:each], [j-each], js[each]').each(function(i, item) {
+    template('[j\\:for], [j-for], j[for], [j\\:each], [j-each], j[each]').each(function(i, item) {
       item = $(item); 
 
       var attribs = {
@@ -189,7 +189,7 @@ var Jinsoku = {
         'j:each': 'each', 'j-each': 'each', 'each': 'each'
       };
 
-      var js = item[0].name === 'js';
+      var js = item[0].name === 'j';
 
       for (var k in attribs) {
         if (k in item[0].attribs) {
@@ -238,7 +238,7 @@ var Jinsoku = {
 
   parseExtends: function(template, callback) {
     var self = this;
-    var templates = template('js[extend], [js-extend], [j\\:extend]');
+    var templates = template('j[extend], [j-extend], [j\\:extend]');
 
     if (!templates) {
       return callback(null, template);
@@ -247,8 +247,8 @@ var Jinsoku = {
     Async.forEach(templates, function(node, cb) {
       node = $(node);
 
-      var statement = node[0].name === 'js';
-      var attr = statement ? 'extend' : (('j:extend' in node[0].attribs) ? 'j:extend' : 'js-extend');
+      var statement = node[0].name === 'j';
+      var attr = statement ? 'extend' : (('j:extend' in node[0].attribs) ? 'j:extend' : 'j-extend');
       var templateName = statement ? node.attr(attr) : node.attr(attr);
 
       if (!statement) {
@@ -283,14 +283,14 @@ var Jinsoku = {
 
     template = $.load(template.html());
 
-    template('js[block], [js-block]').each(function(i, tag) {
-      var isobject  = tag.name !== 'js';
-      var blockName = isobject ? tag.attribs['js-block'] : tag.attribs.block;
+    template('j[block], [j-block]').each(function(i, tag) {
+      var isobject  = tag.name !== 'j';
+      var blockName = isobject ? tag.attribs['j-block'] : tag.attribs.block;
       var isnew     = !blocks[blockName];
 
       blocks[blockName] = {
-        selector: isobject ? '[js-block='+ blockName +']' : 'js[block='+ blockName +']',
-        content: isobject ? $('<div/>').append($(tag).clone().removeAttr('js-block')).html() : $(tag).html(),
+        selector: isobject ? '[j-block='+ blockName +']' : 'j[block='+ blockName +']',
+        content: isobject ? $('<div/>').append($(tag).clone().removeAttr('j-block')).html() : $(tag).html(),
         isobject: isobject
       };
 
@@ -299,11 +299,11 @@ var Jinsoku = {
       }
     });
 
-    template('js[prepend], [js-prepend], [j\\:prepend], js[append], [js-append], [j\\:append]').each(function(i, node) {
-      var statement = node.name === 'js';
+    template('j[prepend], [j-prepend], [j\\:prepend], j[append], [j-append], [j\\:append]').each(function(i, node) {
+      var statement = node.name === 'j';
       var action = 'prepend';
 
-      ['append', 'js-append', 'j:append'].forEach(function(attr) {
+      ['append', 'j-append', 'j:append'].forEach(function(attr) {
         if (attr in node.attribs) {
           action = 'append';
 
@@ -311,9 +311,9 @@ var Jinsoku = {
         }
       });
 
-      var attr = statement ? action : (node.attribs['j:'+ action] ? 'j:'+ action : 'js-'+ action);
+      var attr = statement ? action : (node.attribs['j:'+ action] ? 'j:'+ action : 'j-'+ action);
       var blockName = node.attribs[attr];
-      var selector = statement ? 'js['+ action +'='+ blockName +']' : '['+ (attr===('j:'+ action) ? 'j\\:'+ action : 'js-'+ action) +'='+ blockName +']';
+      var selector = statement ? 'j['+ action +'='+ blockName +']' : '['+ (attr===('j:'+ action) ? 'j\\:'+ action : 'j-'+ action) +'='+ blockName +']';
 
       if (blocks[blockName]) {
         var content = statement ? $(node).html() : $('<div/>').append($(node).clone().removeAttr(attr)).html();
@@ -340,7 +340,7 @@ var Jinsoku = {
 
     template = $.load(template);
 
-    var includes = template('js[include], [js-include], [j\\:include]');
+    var includes = template('j[include], [j-include], [j\\:include]');
 
     if (!includes) {
       return callback(null, template);
@@ -349,8 +349,8 @@ var Jinsoku = {
     Async.forEach(includes, function(node, cb) {
       node = $(node);
 
-      var statement = node[0].name === 'js';
-      var attr = statement ? 'include' : (node[0].attribs['j:include'] ? 'j:include' : 'js-include');
+      var statement = node[0].name === 'j';
+      var attr = statement ? 'include' : (node[0].attribs['j:include'] ? 'j:include' : 'j-include');
       var partialName = node[0].attribs[attr];
 
       // TODO: allow prepend or append included template to node? replace html with append/prepend?
