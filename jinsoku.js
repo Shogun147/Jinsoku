@@ -1,12 +1,23 @@
-var Path = require('path');
-var Fs   = require('fs');
+var isBrowser = !!(typeof(window) !== 'undefined' && navigator && document);
 
-var Async = require('async');
-var $     = require('cheerio');
+if (typeof($) === 'undefined') {
+  var $ = require('cheerio');
+}
 
-var root = Path.dirname(process.mainModule.filename) + Path.sep;
+if (typeof(async) === 'undefined') {
+  var async = require('async');
+}
 
-function merge() {
+if (isBrowser) {
+  var root = window.location.protocol +'//'+ window.location.hostname +'/public/';
+} else {
+  var Path = require('path');
+  var Fs   = require('fs');
+
+  var root = Path.dirname(process.mainModule.filename) + Path.sep;
+}
+
+var merge = $.extend || function () {
   var options, name, source, copy, copy_array, clone;
   var target = arguments[0] || {};
   var length = arguments.length;
@@ -60,7 +71,7 @@ var Jinsoku = {
   blocks: {},
 
   options: {
-    path: root +'views'+ Path.sep,
+    path: root +'views'+ (isBrowser ? '/' : Path.sep),
     dataname: 'data',
     extract: true,
     cache: true,
@@ -84,11 +95,24 @@ var Jinsoku = {
 
     path = self.resolve(path);
 
-    Fs.readFile(path, 'utf-8', function(error, content) {
-      if (error) { return callback(error); };
+    if (isBrowser) {
+      $.ajax({
+        async: true,
+        cache: false, //self.options.cache,
 
-      callback(null, content);
-    });
+        url: path,
+        type: 'get',
+
+        success: function(content) { callback(null, content); },
+        error: function(error) { callback(error); }
+      });
+    } else {
+      Fs.readFile(path, 'utf-8', function(error, content) {
+        if (error) { return callback(error); };
+
+        callback(null, content);
+      });
+    }
   },
 
   _template: function(path, callback) {
@@ -115,7 +139,7 @@ var Jinsoku = {
 
       return tag;
     });
-    content = content.replace(/\[\/(extend|block|prepend|append)\]/g, function(m, action, template) { return '</j">'; });
+    content = content.replace(/\[\/(extend|block|prepend|append)\]/g, function(m, action, template) { return '</j>'; });
 
     return content;
   },
@@ -135,7 +159,13 @@ var Jinsoku = {
     self.compile(path, options, function(error, fn) {
       if (error) { return callback(error); }
 
-      callback(null, fn(data));
+      try {
+        var content = fn(data);
+
+        callback(null, content);
+      } catch (error) {
+        callback(error);
+      }
     });
   },
 
@@ -152,7 +182,7 @@ var Jinsoku = {
     self._template(path, function(error, template) {
       if (error) { return callback(error); }
 
-      Async.waterfall([
+      async.waterfall([
         function(next) {
           self.parseIncludes(template, next);
         },
@@ -174,44 +204,6 @@ var Jinsoku = {
     });
   },
 
-  parser: function(fn) {
-    this.parsers.push(fn.bind(this));
-  },
-
-  prepareIterators: function(template, callback) {
-    var self = this;
-
-    template('[j\\:for], [j-for], j[for], [j\\:each], [j-each], j[each]').each(function(i, item) {
-      item = $(item); 
-
-      var attribs = {
-        'j:for': 'for',   'j-for': 'for',   'for': 'for',
-        'j:each': 'each', 'j-each': 'each', 'each': 'each'
-      };
-
-      var js = item[0].name === 'j';
-
-      for (var k in attribs) {
-        if (k in item[0].attribs) {
-          var statement = attribs[k];
-          var attr = item[0].attribs[k];
-
-          break;
-        }
-      }
-
-      if (js) {
-        item.replaceWith('['+ statement +':'+ attr +']'+ item.html() +'[/'+ statement +']');
-      } else {
-        item.prepend('['+ statement +':'+ attr +']');
-        item.append('[/'+ statement +']');
-        item.removeAttr(k);
-      }
-    });
-
-    callback(null, template);
-  },
-  
   _compile: function(template, callback) {
     var self = this;
 
@@ -219,7 +211,7 @@ var Jinsoku = {
 
     content = content.replace(new RegExp('\\[\\/(for|each|\/)\\]', 'g'), "'; } body += '");
 
-    Async.waterfall([function(next) { next(null, content); }].concat(self.parsers), function(error, content) {
+    async.waterfall([function(next) { next(null, content); }].concat(self.parsers), function(error, content) {
       if (error) {
         return callback(error);
       }
@@ -236,23 +228,78 @@ var Jinsoku = {
     });
   },
 
+  parser: function(fn) {
+    this.parsers.push(fn.bind(this));
+  },
+
+  prepareIterators: function(template, callback) {
+    var self = this;
+
+    var selector = '[j\\:for], [j-for], j[for], [j\\:each], [j-each], j[each]';
+    (isBrowser ? $(selector, template) : template(selector)).each(function(i, item) {
+      item = $(item); 
+
+      var attribs = {
+        'j:for': 'for',   'j-for': 'for',   'for': 'for',
+        'j:each': 'each', 'j-each': 'each', 'each': 'each'
+      };
+
+      var js = item[0][isBrowser ? 'tagName' : 'name'].toLowerCase() === 'j';
+
+      for (var k in attribs) {
+        if (k in item[0][isBrowser ? 'attributes' : 'attribs']) {
+          var statement = attribs[k];
+          var attr = isBrowser ? item[0].attributes[k].value : item[0].attribs[k];
+
+          break;
+        }
+      }
+
+      if (js) {
+        if (isBrowser) {
+          $(item, template).replaceWith('['+ statement +':'+ attr +']'+ item.html() +'[/'+ statement +']')[0].outerHTML;
+        } else {
+          item.replaceWith('['+ statement +':'+ attr +']'+ item.html() +'[/'+ statement +']');
+        }
+      } else {
+        item.prepend('['+ statement +':'+ attr +']');
+        item.append('[/'+ statement +']');
+        item.removeAttr(k);
+      }
+    });
+
+    callback(null, template);
+  },
+
+  // Drop this in favor of includes and global blocks?
   parseExtends: function(template, callback) {
     var self = this;
-    var templates = template('j[extend], [j-extend], [j\\:extend]');
 
-    if (!templates) {
-      return callback(null, template);
+    if (isBrowser) {
+      template = $('<div/>').html(template);
     }
 
-    Async.forEach(templates, function(node, cb) {
+    var selector = 'j[extend], [j-extend], [j\\:extend]';
+    var templates = isBrowser ? $(selector, template) : template('j[extend], [j-extend], [j\\:extend]');
+
+    if (!templates) {
+      return callback(null, isBrowser ? template : template.html());
+    }
+
+    async.forEach(templates, function(node, cb) {
       node = $(node);
 
-      var statement = node[0].name === 'j';
-      var attr = statement ? 'extend' : (('j:extend' in node[0].attribs) ? 'j:extend' : 'j-extend');
-      var templateName = statement ? node.attr(attr) : node.attr(attr);
+      var statement = node[0][(isBrowser ? 'tagName' : 'name')].toLowerCase() === 'j';
+      var attr = 'extend';
 
       if (!statement) {
-        node.removeAttr(attr);
+        attr = node.attr('j:extend') ? 'j:extend' : 'j-extend';
+      }
+
+      var templateName = node.attr(attr);
+
+      if (!statement) {
+        (isBrowser ? $(node, template) : node).removeAttr(attr);
       }
 
       self._template(templateName, function(error, partial) {
@@ -261,75 +308,107 @@ var Jinsoku = {
         self.parseIncludes(partial, function(error, tmpl) {
           if (error) { return cb(error); }
 
-          node.prepend(tmpl.html());
+          node.prepend(isBrowser ? tmpl : tmpl.html());
 
-          self.parseBlocks(templateName, node, function(error, template) {
-            statement ? node.replaceWith(template.html()) : node.html(template.html());
+          self.parseBlocks(templateName, node, function(error, tmp) {
+            if (error) { return cb(error); }
 
-            cb(error);
+            var method = 'replaceWith';
+            if (isBrowser && !statement) { 
+              method = 'html'; 
+            }
+
+            (isBrowser ? $(node, template) : node)[method](tmp.html());
+
+            cb(null);
           });
         });
       });
     }, function(error) {
-      callback(error, template);
+      callback(error, isBrowser ? template : template.html());
     });
   },
 
-  // TODO: make blocks globals?
+  // TODO:
+  // * make blocks globals?
+  // * block cloning
   parseBlocks: function(templateName, template, callback) {
     var self = this;
-    
+
     var blocks = self.blocks[templateName] = self.blocks[templateName] || {};
 
-    template = $.load(template.html());
+    template = isBrowser ? template : $.load(template);
 
-    template('j[block], [j-block]').each(function(i, tag) {
-      var isobject  = tag.name !== 'j';
-      var blockName = isobject ? tag.attribs['j-block'] : tag.attribs.block;
-      var isnew     = !blocks[blockName];
+    var selector = 'j[block], [j-block], [j\\:block]';
+    (isBrowser ? $(selector, template) : template(selector)).each(function(i, node) {
+      node = $(node);
 
-      blocks[blockName] = {
-        selector: isobject ? '[j-block='+ blockName +']' : 'j[block='+ blockName +']',
-        content: isobject ? $('<div/>').append($(tag).clone().removeAttr('j-block')).html() : $(tag).html(),
-        isobject: isobject
-      };
+      var statement = node[0][(isBrowser ? 'tagName' : 'name')].toLowerCase() === 'j';
+      var attr = 'block';
 
-      if (!isnew) {
-        $(tag).remove();
+      if (!statement) {
+        attr = node.attr('j:block') ? 'j:block' : 'j-block';
+      }
+
+      var name = node.attr(attr);
+      var isNew = !blocks[name];
+
+      var selector = statement ? 'j[block='+ name +']' : '['+ attr +'='+ name +']';
+
+      selector = selector.replace(/(:|\.)/g, '\\\$1');
+      
+      if (isNew) {
+        blocks[name] = {
+          selector: selector,
+          content: statement ? node.html() : $('<div/>').html(node.clone().removeAttr(attr)).html(),
+          isObject: !statement
+        };
+      } else {
+        blocks[name].content = statement ? node.html() : $('<div/>').html(node.clone().removeAttr(attr)).html();
+        blocks[name].isObject = !statement;
+      }
+
+      if (!isNew) {
+        (isBrowser ? $(node, template) : node).remove();
       }
     });
 
-    template('j[prepend], [j-prepend], [j\\:prepend], j[append], [j-append], [j\\:append]').each(function(i, node) {
-      var statement = node.name === 'j';
+    var selector = 'j[prepend], [j-prepend], [j\\:prepend], j[append], [j-append], [j\\:append]';
+    (isBrowser ? $(selector, template) : template(selector)).each(function(i, node) {
+      node = $(node);
+
+      var statement = node[0][(isBrowser ? 'tagName' : 'name')].toLowerCase() === 'j';
       var action = 'prepend';
 
-      ['append', 'j-append', 'j:append'].forEach(function(attr) {
-        if (attr in node.attribs) {
+      ['append', 'j-append', 'j:append'].forEach(function(attribute) {
+        if (node.attr(attribute)) {
           action = 'append';
 
           return false;
         }
       });
 
-      var attr = statement ? action : (node.attribs['j:'+ action] ? 'j:'+ action : 'j-'+ action);
-      var blockName = node.attribs[attr];
-      var selector = statement ? 'j['+ action +'='+ blockName +']' : '['+ (attr===('j:'+ action) ? 'j\\:'+ action : 'j-'+ action) +'='+ blockName +']';
+      var attr = statement ? action : (node.attr('j:'+ action) ? 'j:'+ action : 'j-'+ action);
+      var name = node.attr(attr);
 
-      if (blocks[blockName]) {
-        var content = statement ? $(node).html() : $('<div/>').append($(node).clone().removeAttr(attr)).html();
+      var selector = statement ? 'j['+ action +'='+ name +']' : '['+ (attr===('j:'+ action) ? 'j\\:'+ action : 'j-'+ action) +'='+ name +']';
+      selector = selector.replace('.', '\\\.');
 
-        if (blocks[blockName].isObject) {
-          blocks[blockName].content = $('<div/>').append($(blocks[blockName].content)[action](content)).html();
+      if (blocks[name]) {
+        var content = statement ? node.html() : $('<div/>').html(node.clone().removeAttr(attr)).html();
+
+        if (blocks[name].isObject) {
+          blocks[name].content = $('<div/>').html($(blocks[name].content)[action](content)).html();
         } else {
-          blocks[blockName].content = action==='prepend' ? content + blocks[blockName].content : blocks[blockName].content + content;
+          blocks[name].content = action==='prepend' ? content + blocks[name].content : blocks[name].content + content;
         }
       }
 
-      template(selector).remove();
+      (isBrowser ? $(selector, template) : template(selector)).remove();
     });
 
-    for (blockName in blocks) {
-      template(blocks[blockName].selector).replaceWith(blocks[blockName].content);
+    for (name in blocks) {
+      (isBrowser ? $(blocks[name].selector, template) : template(blocks[name].selector)).replaceWith(blocks[name].content);
     }
 
     callback(null, template);
@@ -338,26 +417,33 @@ var Jinsoku = {
   parseIncludes: function(template, callback) {
     var self = this;
 
-    template = $.load(template);
+    template = isBrowser ? $('<div/>').html(template) : $.load(template);
 
-    var includes = template('j[include], [j-include], [j\\:include]');
+    var selector = 'j[include], [j-include], [j\\:include]';
+    var includes = isBrowser ? template.find(selector) : template(selector);
 
     if (!includes) {
       return callback(null, template);
     }
 
-    Async.forEach(includes, function(node, cb) {
+    async.forEach(includes, function(node, cb) {
       node = $(node);
 
-      var statement = node[0].name === 'j';
-      var attr = statement ? 'include' : (node[0].attribs['j:include'] ? 'j:include' : 'j-include');
-      var partialName = node[0].attribs[attr];
+      var statement = node[0][(isBrowser ? 'tagName' : 'name')].toLowerCase() === 'j';
+      var attr = 'include';
+
+      if (!statement) {
+        attr = node.attr('j:include') ? 'j:include' : 'j-include';
+      }
+
+      var partialName = node.attr(attr);
 
       // TODO: allow prepend or append included template to node? replace html with append/prepend?
+      // or better just append included content in case there is something already
       var method = statement ? 'replaceWith' : 'html';
 
       if (!statement) {
-        node.removeAttr(attr);
+        (isBrowser ? $(node, template) : node).removeAttr(attr);
       }
 
       self._template(partialName, function(error, partial) {
@@ -366,13 +452,17 @@ var Jinsoku = {
         self.parseIncludes(partial, function(error, tmpl) {
           if (error) { return cb(error); }
 
-          node[method](tmpl.html());
+          if (isBrowser) {
+            tmpl = $('<div/>').html(tmpl);
+          }
+
+          (isBrowser ? $(node, template) : node)[method](tmpl.html());
 
           cb();
         });
       });
     }, function(error) {
-      callback(error, template);
+      callback(error, (isBrowser ? template.html() : template));
     });
   },
 
@@ -500,6 +590,12 @@ Jinsoku.parser(function(template, next) {
   next(null, template);
 });
 
-module.exports = Jinsoku;
+if (typeof(module) !== 'undefined' && module.exports) {
+  module.exports = Jinsoku;
+} else if (typeof(define) === 'function' && define.amd) {
+  define(function() { return Jinsoku; });
+} else {
+  (function() { return this || (0, eval)('this'); }()).Jinsoku = Jinsoku;
+}
 
 
