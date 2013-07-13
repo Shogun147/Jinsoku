@@ -35,9 +35,37 @@ via npm:
 
     npm install jinsoku
 
-### Browser support
+### Dependencies
 
-Comming soon.
+Jinsoku requires only 2 libs:
+For Node.js:
+
+* Async
+* Cheerio
+
+For browser:
+
+* Async
+* jQuery
+
+## Browser support
+
+```html
+<script src="/public/scripts/jquery.js"></script>
+<script src="/public/scripts/async.js"></script>
+<script src="/public/scripts/jinsoku.js"></script>
+<script>
+  // by default it will look in http[s]://hostname/public/views/ path to read templates
+  // so this will load http://hostname/public/views/home.html
+  Jinsoku.render('home', function(error, content) {
+    console.log(error || content);
+  });
+</script>
+```
+Templates are loaded with `jQuery.ajax` method by default.
+Same as on Node.js we can replace `Jinsoku.resolve` and `Jinsoku.template` methods with our custom. This make Jinsoku pretty easy to integrate into any web application or framework.
+
+Please note that by default jQuery will execute any `<script>` that will be found in your templates content.
 
 ## Public API
 
@@ -346,7 +374,19 @@ Jinsoku has shortcut support for `if` and `switch` statements.
 ```
 
 ## Examples
+We could combine some of the statements:
+```html
+// main file
+<section id="articles" j:each="articles :article" j:include="article"> 
+  // the article.html partial will be included here
+</section>
 
+// article.html file
+<article>
+  <h2>#[article.title]</h2>
+  <p>#[article.description]</p>
+</article>
+```
 
 ## Extending
 
